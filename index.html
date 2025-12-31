@@ -4,7 +4,7 @@
   <link id="favicon" rel="icon" href="" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aim Assist - High Performance</title>
+    <title>Aim Assist - Fast</title>
     <style>
         /* 1. 基礎設定 */
         body, html {
@@ -15,217 +15,98 @@
             background-color: #000;
         }
 
-        /* 2. 遊戲容器 */
+        /* 2. 遊戲容器：強制開啟 GPU 複合層 */
         .game-wrapper {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: black;
             
-            /* 新增：強制 GPU 硬體加速容器 */
+            /* --- 加速核心代碼 1 --- */
+            /* 欺騙瀏覽器這裡有 3D 內容，強迫顯示卡介入運算 */
             transform: translateZ(0);
             backface-visibility: hidden;
             perspective: 1000px;
         }
 
-        /* 3. iframe 設定 (包含加速代碼) */
+        /* 3. iframe 設定 */
         iframe {
             width: 100%;
             height: 100%;
             border: none;
-            transform-origin: center center;
-            transform: scale(1.2);
-            transition: transform 0.1s ease-out;
+            display: block;
 
-            /* --- 加速與優化核心代碼 --- */
+            /* --- 加速核心代碼 2 --- */
+            /* 預告瀏覽器內容會變動，減少渲染延遲 */
+            will-change: transform;
             
-            /* 1. 告訴瀏覽器這個元素會經常變動，請預先分配顯卡記憶體 */
-            will-change: transform, opacity; 
+            /* 啟動硬體加速 */
+            transform: translate3d(0, 0, 0);
             
-            /* 2. 開啟 3D 加速引擎 (即使是 2D 遊戲) */
-            transform: translate3d(0, 0, 0); 
-            
-            /* 3. 優化圖片渲染演算法，追求速度而非畫質平滑度 */
-            image-rendering: pixelated; 
-            image-rendering: -moz-crisp-edges;
+            /* 優化渲染速度，犧牲一點點邊緣平滑度換取效能 */
             image-rendering: -webkit-optimize-contrast;
+            image-rendering: optimizeSpeed;
         }
 
-        /* 4. 全域追蹤濾鏡 (ESP) */
-        .tracker-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
-            z-index: 5000;
-            display: none;
-            background-color: #00FFFF;
-            mix-blend-mode: difference;
-        }
-
-        /* 5. 十字準心 */
+        /* 4. 十字準心 (保留變色功能) */
         .crosshair {
             position: fixed;
-            top: 50%; left: 50%;
+            top: 50%;
+            left: 50%;
             transform: translate(-50%, -50%);
-            width: 24px; height: 24px;
+            width: 24px;
+            height: 24px;
             pointer-events: none;
             z-index: 9999;
+            
+            /* 碰到白色變紅色，背景黑變青色 */
             mix-blend-mode: difference;
         }
 
         .crosshair::before, .crosshair::after {
-            content: ''; position: absolute;
-            background-color: #00FFFF;
-            box-shadow: none; 
+            content: '';
+            position: absolute;
+            background-color: #00FFFF; /* 青色 */
         }
-        .crosshair::before { top: 50%; left: 0; width: 100%; height: 2px; transform: translateY(-50%); }
-        .crosshair::after { left: 50%; top: 0; height: 100%; width: 2px; transform: translateX(-50%); }
 
+        /* 橫線 */
+        .crosshair::before {
+            top: 50%; left: 0; width: 100%; height: 2px;
+            transform: translateY(-50%);
+        }
+        /* 直線 */
+        .crosshair::after {
+            left: 50%; top: 0; height: 100%; width: 2px;
+            transform: translateX(-50%);
+        }
+
+        /* 中心點 */
         .crosshair-dot {
-            position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
+            position: absolute;
+            top: 50%; left: 50%; width: 4px; height: 4px;
             background-color: #00FFFF;
             transform: translate(-50%, -50%);
             border-radius: 50%;
         }
-
-        /* 6. 控制面板 */
-        .controls {
-            position: fixed; top: 10px; right: 10px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 15px; border-radius: 8px;
-            z-index: 10000; color: white;
-            font-family: monospace; /* 改用等寬字體看起來更有科技感 */
-            font-size: 13px;
-            display: flex; flex-direction: column; gap: 10px;
-            border: 1px solid #444;
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
-        }
-        
-        .control-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        
-        button {
-            background: #333; color: white; border: 1px solid #666;
-            padding: 5px 10px; cursor: pointer; border-radius: 4px;
-            font-family: inherit;
-        }
-        button:hover { background: #555; }
-        
-        /* 加速模式指示燈 */
-        .boost-indicator {
-            font-size: 10px; color: #00ff00;
-            text-align: right; margin-top: -5px;
-            text-transform: uppercase;
-        }
-
     </style>
 </head>
 <body>
 
-    <div id="trackerOverlay" class="tracker-overlay"></div>
-
-    <div class="controls">
-        <div class="boost-indicator">⚡ GPU Boost: ACTIVE</div>
-        
-        <div class="control-row">
-            <label>Zoom: <span id="zoomValue">1.2</span>x</label>
-            <input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1.2">
-        </div>
-        
-        <div class="control-row" style="border-top: 1px solid #555; padding-top: 10px;">
-            <label>ESP 追蹤 (X):</label>
-            <button id="toggleTracker">OFF</button>
-        </div>
-        
-        <div style="font-size: 10px; color: #aaa; margin-top:5px;">
-            [Z] Zoom &nbsp; [X] Tracker
-        </div>
+    <div class="crosshair">
+        <div class="crosshair-dot"></div>
     </div>
 
-    <div class="crosshair"><div class="crosshair-dot"></div></div>
-
     <div class="game-wrapper">
-        <iframe id="gameFrame" src="https://biologyclass.club/" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"></iframe>
+        <iframe src="https://biologyclass.club/" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"></iframe>
     </div>
 
   <script>
-    // Favicon
     const canvas = document.createElement('canvas');
-    canvas.width = 64; canvas.height = 64;
+    canvas.width = canvas.height = 64;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 64, 64);
     document.getElementById('favicon').href = canvas.toDataURL();
-
-    // Zoom
-    const slider = document.getElementById('zoomSlider');
-    const zoomValueText = document.getElementById('zoomValue');
-    const iframe = document.getElementById('gameFrame');
-
-    // 應用縮放與保持加速屬性
-    function updateTransform(scale) {
-        // 我們將 scale 和 GPU 加速語法合併在一起，確保不會被覆蓋
-        iframe.style.transform = `scale(${scale}) translate3d(0,0,0)`;
-        zoomValueText.textContent = scale;
-    }
-
-    slider.addEventListener('input', (e) => {
-        updateTransform(e.target.value);
-    });
-
-    // Tracker
-    const trackerOverlay = document.getElementById('trackerOverlay');
-    const toggleBtn = document.getElementById('toggleTracker');
-    let isTrackerOn = false;
-
-    function toggleVisualTracker() {
-        isTrackerOn = !isTrackerOn;
-        if (isTrackerOn) {
-            trackerOverlay.style.display = 'block';
-            toggleBtn.textContent = 'ON';
-            toggleBtn.style.backgroundColor = '#005500';
-            toggleBtn.style.borderColor = '#00ff00';
-        } else {
-            trackerOverlay.style.display = 'none';
-            toggleBtn.textContent = 'OFF';
-            toggleBtn.style.backgroundColor = '#333';
-            toggleBtn.style.borderColor = '#666';
-        }
-    }
-
-    toggleBtn.addEventListener('click', toggleVisualTracker);
-
-    // Keys
-    let isZoomed = true;
-    window.addEventListener('keydown', (e) => {
-        const key = e.key.toLowerCase();
-        if (key === 'z') {
-            isZoomed = !isZoomed;
-            const newVal = isZoomed ? 1.5 : 1.0;
-            slider.value = newVal;
-            updateTransform(newVal);
-        }
-        if (key === 'x') {
-            toggleVisualTracker();
-        }
-    });
-
-    // 初始化：觸發一次渲染以確保 GPU 加速啟動
-    updateTransform(1.2);
-    
-    // 額外效能優化：每隔一段時間清除記憶體碎片 (概念性，實際上由瀏覽器管理)
-    // 但我們可以確保 iframe 保持 focus
-    setInterval(() => {
-        if(document.activeElement !== iframe) {
-            // 注意：這裡不能強制 focus iframe，否則使用者沒辦法拉動滑桿
-            // 但我們可以監控效能狀態
-        }
-    }, 1000);
-
   </script>
 </body>
 </html>
