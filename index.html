@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <link id="favicon" rel="icon" href="" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aim Assist</title>
+    <style>
+        /* 1. 基礎設定 */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+        }
+
+        /* 2. 遊戲容器：用來限制放大後的邊界 */
+        .game-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* 切掉放大後超出螢幕的部分 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 3. iframe 設定：增加轉場效果讓縮放更平滑 */
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            /* 關鍵：設定縮放基準點為中心 */
+            transform-origin: center center;
+            /* 預設放大 1.2 倍 */
+            transform: scale(1.2);
+            transition: transform 0.1s ease-out; /* 讓縮放動作順暢 */
+        }
+
+        /* 4. 十字準心樣式 */
+        .crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none; /* 讓滑鼠穿透 */
+            z-index: 9999;
+        }
+
+        .crosshair::before, .crosshair::after {
+            content: '';
+            position: absolute;
+            background-color: #00ff00; /* 改成螢光綠更明顯 */
+            box-shadow: 0 0 4px #000; /* 黑色邊框增加對比 */
+        }
+
+        /* 橫線 */
+        .crosshair::before {
+            top: 50%; left: 0; width: 100%; height: 2px;
+            transform: translateY(-50%);
+        }
+        /* 直線 */
+        .crosshair::after {
+            left: 50%; top: 0; height: 100%; width: 2px;
+            transform: translateX(-50%);
+        }
+
+        /* 5. 控制面板樣式 (滑桿) */
+        .controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 10000;
+            color: white;
+            font-family: sans-serif;
+            font-size: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .controls label {
+            white-space: nowrap;
+        }
+
+        /* 隱藏預設的 input 樣式 */
+        input[type=range] {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <label>Zoom (縮放): <span id="zoomValue">1.2</span>x</label>
+        <input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1.2">
+    </div>
+
+    <div class="crosshair"></div>
+
+    <div class="game-wrapper">
+        <iframe id="gameFrame" src="https://biologyclass.club/"></iframe>
+    </div>
+
+  <script>
+    // --- Favicon 處理 (原本的代碼) ---
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, 64, 64);
+    document.getElementById('favicon').href = canvas.toDataURL();
+
+    // --- 縮放控制邏輯 ---
+    const slider = document.getElementById('zoomSlider');
+    const zoomValueText = document.getElementById('zoomValue');
+    const iframe = document.getElementById('gameFrame');
+
+    // 當滑桿移動時
+    slider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        iframe.style.transform = `scale(${val})`;
+        zoomValueText.textContent = val;
+    });
+
+    // 鍵盤快捷鍵功能 (按 'Z' 鍵切換放大/正常)
+    let isZoomed = true;
+    window.addEventListener('keydown', (e) => {
+        // 注意：如果你點擊了遊戲內部，網頁可能會抓不到按鍵，這是瀏覽器限制
+        if (e.key.toLowerCase() === 'z') {
+            isZoomed = !isZoomed;
+            if (isZoomed) {
+                slider.value = 1.5; // 快捷鍵切換到 1.5倍
+            } else {
+                slider.value = 1.0; // 切換回 1.0倍
+            }
+            // 觸發 input 事件來更新畫面
+            slider.dispatchEvent(new Event('input'));
+        }
+    });
+  </script>
+</body>
+</html>
