@@ -4,7 +4,7 @@
   <link id="favicon" rel="icon" href="" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aim Assist</title>
+    <title>Aim Assist - Global Tracker</title>
     <style>
         /* 1. 基礎設定 */
         body, html {
@@ -15,134 +15,217 @@
             background-color: #000;
         }
 
-        /* 2. 遊戲容器：用來限制放大後的邊界 */
+        /* 2. 遊戲容器 */
         .game-wrapper {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden; /* 切掉放大後超出螢幕的部分 */
+            overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
+            /* 預設背景設為黑，避免濾鏡計算錯誤 */
+            background: black; 
         }
 
-        /* 3. iframe 設定：增加轉場效果讓縮放更平滑 */
+        /* 3. iframe 設定 */
         iframe {
             width: 100%;
             height: 100%;
             border: none;
-            /* 關鍵：設定縮放基準點為中心 */
             transform-origin: center center;
-            /* 預設放大 1.2 倍 */
             transform: scale(1.2);
-            transition: transform 0.1s ease-out; /* 讓縮放動作順暢 */
+            transition: transform 0.1s ease-out;
         }
 
-        /* 4. 十字準心樣式 */
+        /* 4. 全域追蹤濾鏡 (Global Tracker Overlay) 
+           這是這次新增的關鍵：覆蓋全螢幕的變色層
+        */
+        .tracker-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 讓滑鼠穿透，不影響遊戲 */
+            z-index: 5000; /* 在遊戲之上，但在準心之下 */
+            
+            /* 預設隱藏 */
+            display: none; 
+            
+            /* 顏色邏輯：
+               背景設為青色 (#00FFFF)。
+               因為 mix-blend-mode: difference;
+               遇到白色 (255,255,255) -> 變成 紅色 (255,0,0)
+               遇到黑色 (0,0,0) -> 變成 青色 (0,255,255)
+            */
+            background-color: #00FFFF;
+            mix-blend-mode: difference;
+            
+            /* 稍微降低不透明度，讓你可以稍微看清原本的地形 */
+            opacity: 1.0; 
+        }
+
+        /* 5. 十字準心 */
         .crosshair {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 20px;
-            height: 20px;
-            pointer-events: none; /* 讓滑鼠穿透 */
+            width: 24px;
+            height: 24px;
+            pointer-events: none;
             z-index: 9999;
+            /* 準心本身也保留差值模式，雙重確保 */
+            mix-blend-mode: difference;
         }
 
         .crosshair::before, .crosshair::after {
             content: '';
             position: absolute;
-            background-color: #00ff00; /* 改成螢光綠更明顯 */
-            box-shadow: 0 0 4px #000; /* 黑色邊框增加對比 */
+            background-color: #00FFFF; /* 青色 */
+            box-shadow: none; 
         }
 
-        /* 橫線 */
-        .crosshair::before {
-            top: 50%; left: 0; width: 100%; height: 2px;
-            transform: translateY(-50%);
-        }
-        /* 直線 */
-        .crosshair::after {
-            left: 50%; top: 0; height: 100%; width: 2px;
-            transform: translateX(-50%);
+        .crosshair::before { top: 50%; left: 0; width: 100%; height: 2px; transform: translateY(-50%); }
+        .crosshair::after { left: 50%; top: 0; height: 100%; width: 2px; transform: translateX(-50%); }
+
+        .crosshair-dot {
+            position: absolute;
+            top: 50%; left: 50%; width: 4px; height: 4px;
+            background-color: #00FFFF;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
         }
 
-        /* 5. 控制面板樣式 (滑桿) */
+        /* 6. 控制面板 */
         .controls {
             position: fixed;
             top: 10px;
             right: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
             border-radius: 8px;
             z-index: 10000;
             color: white;
             font-family: sans-serif;
-            font-size: 12px;
+            font-size: 13px;
             display: flex;
+            flex-direction: column; /* 改為垂直排列 */
             gap: 10px;
-            align-items: center;
+            border: 1px solid #444;
         }
         
-        .controls label {
-            white-space: nowrap;
+        .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
         }
 
-        /* 隱藏預設的 input 樣式 */
-        input[type=range] {
+        button {
+            background: #333;
+            color: white;
+            border: 1px solid #666;
+            padding: 5px 10px;
             cursor: pointer;
+            border-radius: 4px;
         }
+        button:hover { background: #555; }
+        
+        /* 開關樣式 */
+        .status {
+            font-weight: bold;
+            color: #ff5555;
+        }
+        .status.on {
+            color: #55ff55;
+        }
+
     </style>
 </head>
 <body>
 
+    <div id="trackerOverlay" class="tracker-overlay"></div>
+
     <div class="controls">
-        <label>Zoom (縮放): <span id="zoomValue">1.2</span>x</label>
-        <input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1.2">
+        <div class="control-row">
+            <label>Zoom (縮放): <span id="zoomValue">1.2</span>x</label>
+            <input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1.2">
+        </div>
+        <div class="control-row" style="border-top: 1px solid #555; padding-top: 10px;">
+            <label>視覺追蹤 (ESP):</label>
+            <button id="toggleTracker">開啟</button>
+        </div>
+        <div style="font-size: 10px; color: #aaa;">快捷鍵: Z (縮放) / X (追蹤)</div>
     </div>
 
-    <div class="crosshair"></div>
+    <div class="crosshair">
+        <div class="crosshair-dot"></div>
+    </div>
 
     <div class="game-wrapper">
         <iframe id="gameFrame" src="https://biologyclass.club/"></iframe>
     </div>
 
   <script>
-    // --- Favicon 處理 (原本的代碼) ---
+    // --- Favicon ---
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 64;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 64, 64);
     document.getElementById('favicon').href = canvas.toDataURL();
 
-    // --- 縮放控制邏輯 ---
+    // --- 縮放控制 ---
     const slider = document.getElementById('zoomSlider');
     const zoomValueText = document.getElementById('zoomValue');
     const iframe = document.getElementById('gameFrame');
 
-    // 當滑桿移動時
     slider.addEventListener('input', (e) => {
         const val = e.target.value;
         iframe.style.transform = `scale(${val})`;
         zoomValueText.textContent = val;
     });
 
-    // 鍵盤快捷鍵功能 (按 'Z' 鍵切換放大/正常)
+    // --- 視覺追蹤控制 (ESP Mode) ---
+    const trackerOverlay = document.getElementById('trackerOverlay');
+    const toggleBtn = document.getElementById('toggleTracker');
+    let isTrackerOn = false;
+
+    function toggleVisualTracker() {
+        isTrackerOn = !isTrackerOn;
+        if (isTrackerOn) {
+            trackerOverlay.style.display = 'block';
+            toggleBtn.textContent = '關閉';
+            toggleBtn.style.backgroundColor = '#005500';
+            toggleBtn.style.borderColor = '#00ff00';
+        } else {
+            trackerOverlay.style.display = 'none';
+            toggleBtn.textContent = '開啟';
+            toggleBtn.style.backgroundColor = '#333';
+            toggleBtn.style.borderColor = '#666';
+        }
+    }
+
+    toggleBtn.addEventListener('click', toggleVisualTracker);
+
+    // --- 鍵盤快捷鍵 ---
     let isZoomed = true;
     window.addEventListener('keydown', (e) => {
-        // 注意：如果你點擊了遊戲內部，網頁可能會抓不到按鍵，這是瀏覽器限制
-        if (e.key.toLowerCase() === 'z') {
+        const key = e.key.toLowerCase();
+        
+        // Z 鍵：縮放
+        if (key === 'z') {
             isZoomed = !isZoomed;
-            if (isZoomed) {
-                slider.value = 1.5; // 快捷鍵切換到 1.5倍
-            } else {
-                slider.value = 1.0; // 切換回 1.0倍
-            }
-            // 觸發 input 事件來更新畫面
+            slider.value = isZoomed ? 1.5 : 1.0;
             slider.dispatchEvent(new Event('input'));
+        }
+
+        // X 鍵：開啟/關閉 視覺追蹤
+        if (key === 'x') {
+            toggleVisualTracker();
         }
     });
   </script>
